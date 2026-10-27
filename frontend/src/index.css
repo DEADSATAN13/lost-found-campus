@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F1EFE6;
+    color: #1F2A24;
+  }
+}
+
+/* Custom noticeboard pin and subtle border utilities */
+.board-card {
+  @apply bg-white rounded-md shadow-notice hover:shadow-noticeHover transition-shadow duration-200 border-t border-r border-b border-line;
+}
+
+.board-card-lost {
+  border-left: 4px solid #B5762A;
+}
+
+.board-card-found {
+  border-left: 4px solid #2C7A7B;
+}
+
+.board-card-trade {
+  border-left: 4px solid #7A5480;
+}
