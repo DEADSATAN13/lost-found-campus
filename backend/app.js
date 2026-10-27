@@ -39,7 +39,11 @@ app.use(
         return callback(null, true);
       }
       const normalizedOrigin = origin.replace(/\/$/, '');
-      if (allowedOrigins.includes(normalizedOrigin)) {
+      if (
+        allowedOrigins.includes(normalizedOrigin) ||
+        normalizedOrigin.endsWith('.vercel.app') ||
+        normalizedOrigin.startsWith('http://localhost:')
+      ) {
         return callback(null, true);
       }
       return callback(new Error('Origin blocked by CORS policy.'));

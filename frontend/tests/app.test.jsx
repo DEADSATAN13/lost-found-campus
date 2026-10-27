@@ -189,7 +189,7 @@ describe('Found. Frontend Component and Page Tests', () => {
     fireEvent.change(screen.getByPlaceholderText(/Arjun Kumar/i), {
       target: { value: 'Test Student' },
     });
-    fireEvent.change(screen.getByPlaceholderText(/yourname@college.edu/i), {
+    fireEvent.change(screen.getByPlaceholderText(/yourname@gmail.com/i), {
       target: { value: 'test@college.edu' },
     });
     fireEvent.change(screen.getByPlaceholderText(/9876543210/i), {
@@ -203,7 +203,7 @@ describe('Found. Frontend Component and Page Tests', () => {
     const checkbox = screen.getByRole('checkbox');
     fireEvent.click(checkbox);
 
-    fireEvent.click(screen.getByRole('button', { name: /Continue to Verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
 
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith(
@@ -218,23 +218,20 @@ describe('Found. Frontend Component and Page Tests', () => {
     });
   });
 
-  // 5. Login Page & Unverified Redirect
-  it('handles login and redirects unverified accounts to verify-email', async () => {
-    api.post.mockRejectedValueOnce({
-      response: {
-        status: 403,
-        data: {
-          needsVerification: true,
-          email: 'unverified@college.edu',
-          message: 'Email not verified.',
-        },
+  // 5. Login Page & Authentication
+  it('handles login form submission', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        message: 'Logged in successfully.',
+        user: { id: 'u1', name: 'Arjun', email: 'arjun@example.com' },
+        token: 'fake-jwt-token',
       },
     });
 
     renderWithProviders(<Login />);
 
-    fireEvent.change(screen.getByPlaceholderText(/arjun@example.com/i), {
-      target: { value: 'unverified@college.edu' },
+    fireEvent.change(screen.getByPlaceholderText(/yourname@gmail.com/i), {
+      target: { value: 'arjun@example.com' },
     });
     fireEvent.change(screen.getByPlaceholderText(/••••••••/i), {
       target: { value: 'password123' },
@@ -244,7 +241,7 @@ describe('Found. Frontend Component and Page Tests', () => {
 
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/auth/login', {
-        identifier: 'unverified@college.edu',
+        identifier: 'arjun@example.com',
         password: 'password123',
       });
     });

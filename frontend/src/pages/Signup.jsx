@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import api from '../api.js';
+import api, { saveSession } from '../api.js';
 import { useToast } from '../components/Toast.jsx';
 
 export default function Signup() {
@@ -22,19 +22,32 @@ export default function Signup() {
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const isGmail = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(cleanEmail);
+    const isCampus = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(edu|ac\.in|org)$/i.test(cleanEmail);
+    if (!isGmail && !isCampus) {
+      showToast('Please enter an authentic Gmail address (e.g. yourname@gmail.com).', 'warning');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.post('/auth/signup', {
         name: name.trim(),
-        email: email.trim(),
+        email: cleanEmail,
         phone: phone.trim(),
         password,
         agreed,
       });
 
-      showToast(res.data.message || 'Verification code sent to your email!', 'success');
-      // Navigate to verification page passing the email in search params
-      navigate(`/verify-email?email=${encodeURIComponent(res.data.email || email.trim())}`);
+      if (res.data.token && res.data.user) {
+        saveSession(res.data.user, res.data.token);
+        showToast('Welcome to Found.! Your account is ready.', 'success');
+        navigate('/');
+      } else {
+        showToast(res.data.message || 'Account created successfully! Please sign in.', 'success');
+        navigate('/login');
+      }
     } catch (err) {
       showToast(err.response?.data?.message || 'Signup failed. Please check your inputs.', 'error');
     } finally {
@@ -72,12 +85,12 @@ export default function Signup() {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1">
-              Campus Email Address *
+              Gmail Address (@gmail.com) *
             </label>
             <input
               type="email"
               required
-              placeholder="e.g. yourname@college.edu"
+              placeholder="e.g. yourname@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-paper border border-line rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss"
@@ -142,7 +155,7 @@ export default function Signup() {
             disabled={loading}
             className="w-full bg-moss hover:bg-moss-dark text-paper text-sm font-semibold py-2.5 rounded transition-colors shadow-sm disabled:opacity-50 cursor-pointer mt-2"
           >
-            {loading ? 'Creating Account...' : 'Continue to Verification →'}
+            {loading ? 'Creating Account...' : 'Create Account →'}
           </button>
         </form>
 

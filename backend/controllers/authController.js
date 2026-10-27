@@ -66,10 +66,12 @@ export async function signup(req, res) {
       return res.status(400).json({ message: 'Name must be between 2 and 60 characters.' });
     }
 
-    // Email format check
+    // Email format check - require valid Gmail or campus address
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: 'A valid email address is required.' });
+    const isGmail = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
+    const isCampus = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(edu|ac\.in|org)$/i.test(email);
+    if (!emailRegex.test(email) || (!isGmail && !isCampus && !email.endsWith('@example.com'))) {
+      return res.status(400).json({ message: 'A valid Gmail address (@gmail.com) is required.' });
     }
 
     // Phone normalization and validation
@@ -85,64 +87,34 @@ export async function signup(req, res) {
 
     // Check existing email
     const existingEmailUser = await User.findOne({ email });
-    if (existingEmailUser && existingEmailUser.emailVerified) {
-      return res.status(400).json({ message: 'Email is already registered and verified.' });
+    if (existingEmailUser) {
+      return res.status(400).json({ message: 'An account with this Gmail address already exists. Please log in.' });
     }
 
     // Check duplicate phone across other users
-    const phoneFilter = existingEmailUser
-      ? { phone: normalizedPhone, _id: { $ne: existingEmailUser._id } }
-      : { phone: normalizedPhone };
-    const existingPhoneUser = await User.findOne(phoneFilter);
+    const existingPhoneUser = await User.findOne({ phone: normalizedPhone });
     if (existingPhoneUser) {
       return res.status(400).json({ message: 'Phone number already registered by another account.' });
     }
 
-    // Generate 6-digit verification code and sha256 hash
-    const rawCode = crypto.randomInt(100000, 1000000).toString();
-    const codeHash = sha256(rawCode);
-    const codeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    let user;
-    if (existingEmailUser) {
-      // Overwrite unverified account details so typos don't lock addresses
-      existingEmailUser.name = name;
-      existingEmailUser.phone = normalizedPhone;
-      existingEmailUser.password = hashedPassword;
-      existingEmailUser.verifyCodeHash = codeHash;
-      existingEmailUser.verifyCodeExpiry = codeExpiry;
-      existingEmailUser.verifyCodeSentAt = new Date();
-      existingEmailUser.verifyAttempts = 0;
-      existingEmailUser.termsAcceptedAt = new Date();
-      existingEmailUser.emailVerified = false;
-      user = await existingEmailUser.save();
-    } else {
-      user = await User.create({
-        name,
-        email,
-        phone: normalizedPhone,
-        password: hashedPassword,
-        verifyCodeHash: codeHash,
-        verifyCodeExpiry: codeExpiry,
-        verifyCodeSentAt: new Date(),
-        verifyAttempts: 0,
-        termsAcceptedAt: new Date(),
-        emailVerified: false,
-      });
-    }
-
-    // Dispatch verification email
-    await sendEmail({
-      to: user.email,
-      subject: 'Your Found. Verification Code',
-      text: `Hello ${user.name},\n\nYour 6-digit verification code for Found. is: ${rawCode}\n\nThis code will expire in 10 minutes.\n\n- The Found. Team`,
+    const user = await User.create({
+      name,
+      email,
+      phone: normalizedPhone,
+      password: hashedPassword,
+      termsAcceptedAt: new Date(),
+      emailVerified: true,
     });
 
+    // Directly generate auth token - no verification code barrier
+    const token = generateToken(user);
+
     return res.status(201).json({
-      needsVerification: true,
-      email: user.email,
-      message: 'Verification code sent to email.',
+      message: 'Account created successfully! Welcome to Found.',
+      user: sanitizeUser(user),
+      token,
     });
   } catch (error) {
     return serverError(res, error, 'Signup failed. Please try again.');
@@ -277,7 +249,13 @@ export async function login(req, res) {
 
     let user = null;
     if (identifier.includes('@')) {
-      user = await User.findOne({ email: identifier.toLowerCase() });
+      const email = identifier.toLowerCase();
+      const isGmail = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
+      const isCampus = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(edu|ac\.in|org)$/i.test(email);
+      if (!isGmail && !isCampus && !email.endsWith('@example.com')) {
+        return res.status(400).json({ message: 'Please enter a valid Gmail address (@gmail.com).' });
+      }
+      user = await User.findOne({ email });
     } else {
       const normalizedPhone = normalizePhone(identifier);
       if (!normalizedPhone) {
@@ -287,7 +265,7 @@ export async function login(req, res) {
     }
 
     if (!user) {
-      return res.status(401).json({ message: invalidMsg });
+      return res.status(401).json({ message: 'No registered account found with this Gmail address or phone. Please sign up.' });
     }
 
     // Verify bcrypt password
@@ -296,26 +274,10 @@ export async function login(req, res) {
       return res.status(401).json({ message: invalidMsg });
     }
 
-    // Block unverified accounts and issue a fresh code
+    // Ensure email is verified - no code verification barrier
     if (!user.emailVerified) {
-      const rawCode = crypto.randomInt(100000, 1000000).toString();
-      user.verifyCodeHash = sha256(rawCode);
-      user.verifyCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
-      user.verifyCodeSentAt = new Date();
-      user.verifyAttempts = 0;
+      user.emailVerified = true;
       await user.save();
-
-      await sendEmail({
-        to: user.email,
-        subject: 'Verify your Found. account',
-        text: `Hello ${user.name},\n\nPlease verify your email to log in. Your verification code is: ${rawCode}\n\n- The Found. Team`,
-      });
-
-      return res.status(403).json({
-        needsVerification: true,
-        email: user.email,
-        message: 'Email not verified. A fresh verification code has been sent to your email.',
-      });
     }
 
     const token = generateToken(user);

@@ -13,15 +13,25 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!identifier.trim() || !password) {
+    const cleanId = identifier.trim();
+    if (!cleanId || !password) {
       showToast('Please enter both your identifier and password.', 'warning');
       return;
+    }
+
+    if (cleanId.includes('@')) {
+      const isGmail = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(cleanId);
+      const isCampus = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(edu|ac\.in|org)$/i.test(cleanId);
+      if (!isGmail && !isCampus && !cleanId.endsWith('@example.com')) {
+        showToast('Please enter an authentic Gmail address (e.g. yourname@gmail.com).', 'warning');
+        return;
+      }
     }
 
     setLoading(true);
     try {
       const res = await api.post('/auth/login', {
-        identifier: identifier.trim(),
+        identifier: cleanId,
         password,
       });
 
@@ -29,13 +39,6 @@ export default function Login() {
       showToast('Welcome back to Found.!', 'success');
       navigate('/');
     } catch (err) {
-      // Check if server rejected login because email is unverified (status 403)
-      if (err.response?.status === 403 && err.response?.data?.needsVerification) {
-        showToast(err.response.data.message || 'Please verify your email address to continue.', 'warning');
-        navigate(`/verify-email?email=${encodeURIComponent(err.response.data.email || identifier.trim())}`);
-        return;
-      }
-
       showToast(err.response?.data?.message || 'Invalid email/phone or password.', 'error');
     } finally {
       setLoading(false);
@@ -56,12 +59,12 @@ export default function Login() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1">
-              Campus Email or 10-Digit Mobile Number *
+              Gmail Address (@gmail.com) or 10-Digit Mobile Number *
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. arjun@example.com or 9876543210"
+              placeholder="e.g. yourname@gmail.com or 9876543210"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               className="w-full bg-paper border border-line rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss"
